@@ -138,6 +138,7 @@ int main(int argc, char **argv) {
     for (uint64_t i = 0; i < cfg.threads; i++) {
         thread *t = &threads[i];
         t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
+        t->first_start = time_us();
         t->connections = connections;
         t->stop_at     = stop_at;
 
@@ -315,7 +316,7 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
 
     (void) stats_summarize(thread->latency);
     long double latency = stats_percentile(thread->latency, 90.0) / 1000.0L;
-    long double interval = MAX(latency * 2, 10);
+    long double interval = 1000; // MAX(latency * 2, 10);
     long double rate = (interval / latency) * thread->connections;
 
     if (latency == 0) return CALIBRATE_DELAY_MS;
@@ -364,9 +365,12 @@ static int sample_rate(aeEventLoop *loop, long long id, void *data) {
     stats_record(statistics.requests, requests);
     pthread_mutex_unlock(&statistics.mutex);
 
+    uint64_t start = time_us();
+    printf("[REQ] %lu,%lu\n", (start - thread->first_start) / 1000, thread->requests);
+
     thread->missed  += missed;
     thread->requests = 0;
-    thread->start    = time_us();
+    thread->start    = start;
     stats_rewind(thread->latency);
 
     return thread->interval;
